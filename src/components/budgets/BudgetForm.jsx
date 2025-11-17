@@ -1,158 +1,177 @@
-import { useEffect } from 'react'
-import { useForm } from 'react-hook-form'
-import { Loader2, Target } from 'lucide-react'
-import { Button } from '@/components/ui/button.jsx'
-import { Input } from '@/components/ui/input.jsx'
-import { Label } from '@/components/ui/label.jsx'
-import { Textarea } from '@/components/ui/textarea.jsx'
+import { useEffect } from "react";
+import { useForm } from "react-hook-form";
+import { Loader2, Target } from "lucide-react";
+import { Button } from "@/components/ui/button.jsx";
+import { Input } from "@/components/ui/input.jsx";
+import { Label } from "@/components/ui/label.jsx";
+import { Textarea } from "@/components/ui/textarea.jsx";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue
-} from '@/components/ui/select.jsx'
+  SelectValue,
+} from "@/components/ui/select.jsx";
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
-  CardTitle
-} from '@/components/ui/card.jsx'
-import { Alert, AlertDescription } from '@/components/ui/alert.jsx'
-import { useBudgets } from '../../contexts/BudgetsContext.jsx'
-import { CATEGORIES } from '../../contexts/TransactionsContext.jsx'
+  CardTitle,
+} from "@/components/ui/card.jsx";
+import { Alert, AlertDescription } from "@/components/ui/alert.jsx";
+import { useBudgets } from "../../contexts/BudgetsContext.jsx";
+import { CATEGORIES } from "../../contexts/TransactionsContext.jsx";
+
+const MONTH_OPTIONS = [
+  { value: 1, label: "Janeiro" },
+  { value: 2, label: "Fevereiro" },
+  { value: 3, label: "Março" },
+  { value: 4, label: "Abril" },
+  { value: 5, label: "Maio" },
+  { value: 6, label: "Junho" },
+  { value: 7, label: "Julho" },
+  { value: 8, label: "Agosto" },
+  { value: 9, label: "Setembro" },
+  { value: 10, label: "Outubro" },
+  { value: 11, label: "Novembro" },
+  { value: 12, label: "Dezembro" },
+];
+
+const getYearOptions = () => {
+  const currentYear = new Date().getFullYear();
+  return Array.from({ length: 3 }, (_, i) => currentYear + i);
+};
 
 export function BudgetForm({ budget, onSave, onCancel }) {
-  const { addBudget, updateBudget, isLoading, error, clearError } = useBudgets()
+  const { addBudget, updateBudget, isLoading, error, clearError } =
+    useBudgets();
 
   const {
     register,
     handleSubmit,
     formState: { errors },
     setValue,
+    setError,
+    clearErrors,
     watch,
-    reset
+    reset,
   } = useForm({
     defaultValues: {
-      name: budget?.name || '',
-      categoryId: budget?.categoryId || '',
-      amount: budget?.amount || '',
+      name: budget?.name || "",
+      categoryId: budget?.categoryId || "",
+      amount: budget?.amount || "",
       year: budget?.year || new Date().getFullYear(),
       month: budget?.month || new Date().getMonth() + 1,
-      description: budget?.description || ''
-    }
-  })
+      description: budget?.description || "",
+    },
+  });
 
-  const watchedCategoryId = watch('categoryId')
-  const watchedAmount = watch('amount')
-  const watchedYear = watch('year')
-  const watchedMonth = watch('month')
-  const isEditMode = !!budget
+  const watchedCategoryId = watch("categoryId");
+  const watchedAmount = watch("amount");
+  const watchedYear = watch("year");
+  const watchedMonth = watch("month");
+  const watchedName = watch("name");
+  const isEditMode = !!budget;
 
   useEffect(() => {
-    clearError()
-  }, [clearError])
+    clearError();
+  }, [clearError]);
 
-  const expenseCategories = Object.values(CATEGORIES.EXPENSE)
+  const expenseCategories = Object.values(CATEGORIES.EXPENSE);
 
   const getSelectedCategory = () => {
-    return expenseCategories.find((cat) => cat.id === watchedCategoryId)
-  }
+    return expenseCategories.find((cat) => cat.id === watchedCategoryId);
+  };
 
   const onSubmit = async (data) => {
     try {
-      const selectedCategory = getSelectedCategory()
+      const selectedCategory = getSelectedCategory();
+
       if (!selectedCategory) {
-        return
+        setError("categoryId", {
+          type: "manual",
+          message: "Categoria é obrigatória",
+        });
+        return;
       }
+
+      const year = parseInt(data.year, 10);
+      const month = parseInt(data.month, 10);
+
+      // Monta datas do período (mês inteiro)
+      const startDate = new Date(year, month - 1, 1);
+      const endDate = new Date(year, month, 0, 23, 59, 59);
 
       const budgetData = {
-        ...data,
-        category: selectedCategory,
-        amount: parseFloat(data.amount),
-        year: parseInt(data.year),
-        month: parseInt(data.month)
-      }
+        category: selectedCategory.id, // ⚠️ string
+        name: data.name,
+        amount: parseFloat(data.amount), // número
+        period: "monthly", // pode deixar fixo por enquanto
+        startDate: startDate.toISOString(),
+        endDate: endDate.toISOString(),
+        color: selectedCategory.color || "#3498db", // fallback
+        alertThreshold: 80, // padrão
+        description: data.description || "", // backend ignora, mas não atrapalha
+      };
 
       if (isEditMode) {
-        await updateBudget(budget.id, budgetData)
+        await updateBudget(budget.id, budgetData);
       } else {
-        await addBudget(budgetData)
+        await addBudget(budgetData);
       }
 
-      onSave?.()
+      onSave?.();
     } catch (err) {
-      console.error('Erro ao salvar orçamento:', err)
+      console.error("Erro ao salvar orçamento:", err);
     }
-  }
+  };
 
   const handleCancel = () => {
-    reset()
-    clearError()
-    onCancel?.()
-  }
+    reset();
+    clearError();
+    onCancel?.();
+  };
 
   const formatCurrency = (amount) => {
-    if (!amount) return 'R$ 0,00'
-    return new Intl.NumberFormat('pt-BR', {
-      style: 'currency',
-      currency: 'BRL'
-    }).format(amount)
-  }
-
-  const getYearOptions = () => {
-    const currentYear = new Date().getFullYear()
-    return Array.from({ length: 3 }, (_, i) => currentYear + i)
-  }
-
-  const getMonthOptions = () => {
-    return [
-      { value: 1, label: 'Janeiro' },
-      { value: 2, label: 'Fevereiro' },
-      { value: 3, label: 'Março' },
-      { value: 4, label: 'Abril' },
-      { value: 5, label: 'Maio' },
-      { value: 6, label: 'Junho' },
-      { value: 7, label: 'Julho' },
-      { value: 8, label: 'Agosto' },
-      { value: 9, label: 'Setembro' },
-      { value: 10, label: 'Outubro' },
-      { value: 11, label: 'Novembro' },
-      { value: 12, label: 'Dezembro' }
-    ]
-  }
+    if (!amount) return "R$ 0,00";
+    return new Intl.NumberFormat("pt-BR", {
+      style: "currency",
+      currency: "BRL",
+    }).format(amount);
+  };
 
   return (
     <Card className="w-full max-w-2xl mx-auto">
       <CardHeader>
         <CardTitle className="flex items-center space-x-2">
           <Target className="h-5 w-5" />
-          <span>{isEditMode ? 'Editar Orçamento' : 'Novo Orçamento'}</span>
+          <span>{isEditMode ? "Editar Orçamento" : "Novo Orçamento"}</span>
         </CardTitle>
         <CardDescription>
           {isEditMode
-            ? 'Atualize as informações do seu orçamento'
-            : 'Defina um limite de gastos para uma categoria específica'}
+            ? "Atualize as informações do seu orçamento"
+            : "Defina um limite de gastos para uma categoria específica"}
         </CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+          {/* Nome */}
           <div className="space-y-2">
             <Label htmlFor="name">Nome do Orçamento *</Label>
             <Input
               id="name"
               placeholder="Ex: Alimentação, Transporte, Lazer..."
-              {...register('name', {
-                required: 'Nome do orçamento é obrigatório',
+              {...register("name", {
+                required: "Nome do orçamento é obrigatório",
                 minLength: {
                   value: 2,
-                  message: 'Nome deve ter pelo menos 2 caracteres'
+                  message: "Nome deve ter pelo menos 2 caracteres",
                 },
                 maxLength: {
                   value: 50,
-                  message: 'Nome deve ter no máximo 50 caracteres'
-                }
+                  message: "Nome deve ter no máximo 50 caracteres",
+                },
               })}
             />
             {errors.name && (
@@ -160,11 +179,16 @@ export function BudgetForm({ budget, onSave, onCancel }) {
             )}
           </div>
 
+          {/* Categoria */}
           <div className="space-y-2">
             <Label htmlFor="categoryId">Categoria *</Label>
+            {/* Campo "virtual" controlado: guardado no RHF via setValue/watch */}
             <Select
               value={watchedCategoryId}
-              onValueChange={(value) => setValue('categoryId', value)}
+              onValueChange={(value) => {
+                setValue("categoryId", value, { shouldValidate: true });
+                clearErrors("categoryId");
+              }}
             >
               <SelectTrigger>
                 <SelectValue placeholder="Selecione uma categoria" />
@@ -180,13 +204,21 @@ export function BudgetForm({ budget, onSave, onCancel }) {
                 ))}
               </SelectContent>
             </Select>
+            {/* Placeholder “invisível” para o RHF conhecer o campo e permitir setError/clearErrors */}
+            <input
+              type="hidden"
+              {...register("categoryId", {
+                required: "Categoria é obrigatória",
+              })}
+            />
             {errors.categoryId && (
               <p className="text-sm text-destructive">
-                Categoria é obrigatória
+                {errors.categoryId.message}
               </p>
             )}
           </div>
 
+          {/* Valor */}
           <div className="space-y-2">
             <Label htmlFor="amount">Valor do Orçamento *</Label>
             <div className="relative">
@@ -199,16 +231,16 @@ export function BudgetForm({ budget, onSave, onCancel }) {
                 step="0.01"
                 placeholder="0,00"
                 className="pl-10 text-lg"
-                {...register('amount', {
-                  required: 'Valor do orçamento é obrigatório',
+                {...register("amount", {
+                  required: "Valor do orçamento é obrigatório",
                   min: {
                     value: 0.01,
-                    message: 'Valor deve ser maior que zero'
+                    message: "Valor deve ser maior que zero",
                   },
                   max: {
                     value: 999999.99,
-                    message: 'Valor muito alto'
-                  }
+                    message: "Valor muito alto",
+                  },
                 })}
               />
             </div>
@@ -224,15 +256,20 @@ export function BudgetForm({ budget, onSave, onCancel }) {
             )}
           </div>
 
+          {/* Ano / Mês */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="year">Ano *</Label>
               <Select
                 value={watchedYear?.toString()}
-                onValueChange={(value) => setValue('year', parseInt(value))}
+                onValueChange={(value) =>
+                  setValue("year", parseInt(value, 10), {
+                    shouldValidate: true,
+                  })
+                }
               >
                 <SelectTrigger>
-                  <SelectValue />
+                  <SelectValue placeholder="Selecione o ano" />
                 </SelectTrigger>
                 <SelectContent>
                   {getYearOptions().map((year) => (
@@ -248,13 +285,17 @@ export function BudgetForm({ budget, onSave, onCancel }) {
               <Label htmlFor="month">Mês *</Label>
               <Select
                 value={watchedMonth?.toString()}
-                onValueChange={(value) => setValue('month', parseInt(value))}
+                onValueChange={(value) =>
+                  setValue("month", parseInt(value, 10), {
+                    shouldValidate: true,
+                  })
+                }
               >
                 <SelectTrigger>
-                  <SelectValue />
+                  <SelectValue placeholder="Selecione o mês" />
                 </SelectTrigger>
                 <SelectContent>
-                  {getMonthOptions().map((month) => (
+                  {MONTH_OPTIONS.map((month) => (
                     <SelectItem
                       key={month.value}
                       value={month.value.toString()}
@@ -267,17 +308,18 @@ export function BudgetForm({ budget, onSave, onCancel }) {
             </div>
           </div>
 
+          {/* Descrição */}
           <div className="space-y-2">
             <Label htmlFor="description">Descrição</Label>
             <Textarea
               id="description"
               placeholder="Descreva os objetivos deste orçamento..."
               rows={3}
-              {...register('description', {
+              {...register("description", {
                 maxLength: {
                   value: 200,
-                  message: 'Descrição deve ter no máximo 200 caracteres'
-                }
+                  message: "Descrição deve ter no máximo 200 caracteres",
+                },
               })}
             />
             {errors.description && (
@@ -287,6 +329,7 @@ export function BudgetForm({ budget, onSave, onCancel }) {
             )}
           </div>
 
+          {/* Preview */}
           {watchedCategoryId && watchedAmount && (
             <div className="space-y-2">
               <Label>Preview</Label>
@@ -298,19 +341,19 @@ export function BudgetForm({ budget, onSave, onCancel }) {
                     </span>
                     <div>
                       <p className="font-medium">
-                        {watch('name') || 'Nome do orçamento'}
+                        {watchedName || "Nome do orçamento"}
                       </p>
                       <p className="text-sm text-muted-foreground">
                         {getSelectedCategory()?.name}
                         {watchedYear && watchedMonth && (
                           <span>
-                            {' '}
-                            •{' '}
+                            {" "}
+                            •{" "}
                             {
-                              getMonthOptions().find(
+                              MONTH_OPTIONS.find(
                                 (m) => m.value === watchedMonth
                               )?.label
-                            }{' '}
+                            }{" "}
                             {watchedYear}
                           </span>
                         )}
@@ -330,6 +373,7 @@ export function BudgetForm({ budget, onSave, onCancel }) {
             </div>
           )}
 
+          {/* Dicas */}
           <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
             <h4 className="font-medium text-blue-900 mb-2">
               💡 Dicas para definir orçamentos
@@ -350,23 +394,25 @@ export function BudgetForm({ budget, onSave, onCancel }) {
             </ul>
           </div>
 
+          {/* Erro da API/contexto */}
           {error && (
             <Alert variant="destructive">
               <AlertDescription>{error}</AlertDescription>
             </Alert>
           )}
 
+          {/* Ações */}
           <div className="flex space-x-4">
             <Button type="submit" className="flex-1" disabled={isLoading}>
               {isLoading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  {isEditMode ? 'Atualizando...' : 'Criando...'}
+                  {isEditMode ? "Atualizando..." : "Criando..."}
                 </>
               ) : isEditMode ? (
-                'Atualizar Orçamento'
+                "Atualizar Orçamento"
               ) : (
-                'Criar Orçamento'
+                "Criar Orçamento"
               )}
             </Button>
             <Button type="button" variant="outline" onClick={handleCancel}>
@@ -376,5 +422,5 @@ export function BudgetForm({ budget, onSave, onCancel }) {
         </form>
       </CardContent>
     </Card>
-  )
+  );
 }

@@ -1,21 +1,15 @@
 import { useState, useMemo } from 'react'
 import { 
-  Calendar,
   Download,
   TrendingUp,
   TrendingDown,
   PieChart as PieChartIcon,
   BarChart3,
-  FileText,
   Target,
   Wallet,
   CreditCard
 } from 'lucide-react'
 import { 
-  LineChart, 
-  Line, 
-  AreaChart,
-  Area,
   PieChart, 
   Pie, 
   Cell, 
@@ -27,7 +21,9 @@ import {
   CartesianGrid, 
   Tooltip, 
   Legend,
-  ComposedChart
+  ComposedChart,
+  Area,
+  Line,
 } from 'recharts'
 import { format, subMonths, startOfMonth, endOfMonth, eachMonthOfInterval } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
@@ -38,7 +34,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs.jsx'
 import { useTransactions, TRANSACTION_TYPES } from '../../contexts/TransactionsContext.jsx'
 import { useAccounts } from '../../contexts/AccountsContext.jsx'
-import { useBudgets } from '../../contexts/BudgetsContext.jsx'
 import { useGoals } from '../../contexts/GoalsContext.jsx'
 
 export function ReportsDashboard() {
@@ -49,43 +44,45 @@ export function ReportsDashboard() {
     transactions, 
     getTotalIncome, 
     getTotalExpenses,
-    getTransactionsByCategory 
   } = useTransactions()
   
   const { accounts, getTotalBalance } = useAccounts()
-  const { getBudgetsWithSpent } = useBudgets()
-  const { getGoalsWithProgress, getTotalSaved } = useGoals()
+  const { getTotalSaved } = useGoals()
 
-  // Calcular período baseado na seleção
-  const getPeriodDates = () => {
-    const endDate = new Date()
-    let startDate
-    
+  // Datas de início/fim do período, memoizadas
+  const { startDate, endDate } = useMemo(() => {
+    const end = new Date()
+    let start
+
     switch (selectedPeriod) {
       case '3months':
-        startDate = subMonths(endDate, 3)
+        start = subMonths(end, 3)
         break
       case '6months':
-        startDate = subMonths(endDate, 6)
+        start = subMonths(end, 6)
         break
       case '12months':
-        startDate = subMonths(endDate, 12)
+        start = subMonths(end, 12)
         break
       default:
-        startDate = subMonths(endDate, 6)
+        start = subMonths(end, 6)
     }
-    
-    return { startDate, endDate }
-  }
 
-  const { startDate, endDate } = getPeriodDates()
+    // Normalizar para início/fim de dia, se quiser deixar mais “redondinho”
+    start.setHours(0, 0, 0, 0)
+    end.setHours(23, 59, 59, 999)
 
-  // Filtrar transações por período e conta
+    return { startDate: start, endDate: end }
+  }, [selectedPeriod])
+
+  // Transações filtradas por período e conta
   const filteredTransactions = useMemo(() => {
-    return transactions.filter(transaction => {
+    return transactions.filter((transaction) => {
       const transactionDate = new Date(transaction.date)
       const isInPeriod = transactionDate >= startDate && transactionDate <= endDate
-      const isInAccount = selectedAccount === 'all' || transaction.accountId === selectedAccount
+      const isInAccount =
+        selectedAccount === 'all' || transaction.accountId === selectedAccount
+
       return isInPeriod && isInAccount && transaction.status === 'completed'
     })
   }, [transactions, startDate, endDate, selectedAccount])
@@ -93,99 +90,112 @@ export function ReportsDashboard() {
   // Dados para gráfico de tendência mensal
   const monthlyTrendData = useMemo(() => {
     const months = eachMonthOfInterval({ start: startDate, end: endDate })
-    
-    return months.map(month => {
+
+    return months.map((month) => {
       const monthStart = startOfMonth(month)
       const monthEnd = endOfMonth(month)
-      
-      const monthTransactions = filteredTransactions.filter(t => {
+
+      const monthTransactions = filteredTransactions.filter((t) => {
         const tDate = new Date(t.date)
         return tDate >= monthStart && tDate <= monthEnd
       })
-      
+
       const income = monthTransactions
-        .filter(t => t.type === TRANSACTION_TYPES.INCOME)
+        .filter((t) => t.type === TRANSACTION_TYPES.INCOME)
         .reduce((sum, t) => sum + t.amount, 0)
-      
+
       const expenses = monthTransactions
-        .filter(t => t.type === TRANSACTION_TYPES.EXPENSE)
+        .filter((t) => t.type === TRANSACTION_TYPES.EXPENSE)
         .reduce((sum, t) => sum + t.amount, 0)
-      
+
       return {
         month: format(month, 'MMM yyyy', { locale: ptBR }),
         receitas: income,
         despesas: expenses,
-        saldo: income - expenses
+        saldo: income - expenses,
       }
     })
   }, [filteredTransactions, startDate, endDate])
 
-  // Dados para gráfico de categorias
+  // Dados para gráfico de categorias (despesas)
   const categoryData = useMemo(() => {
     const categoryTotals = {}
-    
+
     filteredTransactions
-      .filter(t => t.type === TRANSACTION_TYPES.EXPENSE)
-      .forEach(transaction => {
+      .filter((t) => t.type === TRANSACTION_TYPES.EXPENSE)
+      .forEach((transaction) => {
         const categoryId = transaction.category.id
         if (!categoryTotals[categoryId]) {
           categoryTotals[categoryId] = {
             name: transaction.category.name,
             icon: transaction.category.icon,
             color: transaction.category.color,
-            value: 0
+            value: 0,
           }
         }
         categoryTotals[categoryId].value += transaction.amount
       })
-    
+
     return Object.values(categoryTotals)
       .sort((a, b) => b.value - a.value)
-      .slice(0, 8) // Top 8 categorias
+      .slice(0, 8)
   }, [filteredTransactions])
 
-  // Dados para análise de contas
+  // Análise por conta
   const accountAnalysis = useMemo(() => {
-    return accounts.map(account => {
-      const accountTransactions = filteredTransactions.filter(t => t.accountId === account.id)
-      const income = accountTransactions
-        .filter(t => t.type === TRANSACTION_TYPES.INCOME)
-        .reduce((sum, t) => sum + t.amount, 0)
-      const expenses = accountTransactions
-        .filter(t => t.type === TRANSACTION_TYPES.EXPENSE)
-        .reduce((sum, t) => sum + t.amount, 0)
-      
-      return {
-        ...account,
-        income,
-        expenses,
-        netFlow: income - expenses,
-        transactionCount: accountTransactions.length
-      }
-    }).sort((a, b) => b.netFlow - a.netFlow)
+    return accounts
+      .map((account) => {
+        const accountTransactions = filteredTransactions.filter(
+          (t) => t.accountId === account.id
+        )
+
+        const income = accountTransactions
+          .filter((t) => t.type === TRANSACTION_TYPES.INCOME)
+          .reduce((sum, t) => sum + t.amount, 0)
+
+        const expenses = accountTransactions
+          .filter((t) => t.type === TRANSACTION_TYPES.EXPENSE)
+          .reduce((sum, t) => sum + t.amount, 0)
+
+        return {
+          ...account,
+          income,
+          expenses,
+          netFlow: income - expenses,
+          transactionCount: accountTransactions.length,
+        }
+      })
+      .sort((a, b) => b.netFlow - a.netFlow)
   }, [accounts, filteredTransactions])
 
-  // Calcular totais do período
+  // Totais do período
   const periodIncome = getTotalIncome(startDate, endDate)
   const periodExpenses = getTotalExpenses(startDate, endDate)
   const periodBalance = periodIncome - periodExpenses
   const totalBalance = getTotalBalance()
   const totalSaved = getTotalSaved()
 
-  // Calcular métricas
-  const averageMonthlyIncome = periodIncome / monthlyTrendData.length
-  const averageMonthlyExpenses = periodExpenses / monthlyTrendData.length
-  const savingsRate = periodIncome > 0 ? ((periodIncome - periodExpenses) / periodIncome) * 100 : 0
+  const monthsCount = Math.max(monthlyTrendData.length, 1)
+  const averageMonthlyIncome = periodIncome / monthsCount
+  const averageMonthlyExpenses = periodExpenses / monthsCount
+  const savingsRate =
+    periodIncome > 0 ? ((periodIncome - periodExpenses) / periodIncome) * 100 : 0
 
   const formatCurrency = (amount) => {
     return new Intl.NumberFormat('pt-BR', {
       style: 'currency',
-      currency: 'BRL'
-    }).format(amount)
+      currency: 'BRL',
+    }).format(amount || 0)
   }
 
   const formatPercentage = (value) => {
+    if (!Number.isFinite(value)) return '0,0%'
     return `${value.toFixed(1)}%`
+  }
+
+  const getCategoryPercentageOfTotal = (value) => {
+    if (periodExpenses <= 0) return 0
+    return (value / periodExpenses) * 100
   }
 
   const exportToPDF = () => {
@@ -197,6 +207,8 @@ export function ReportsDashboard() {
     // Implementação futura para exportação CSV
     console.log('Exportar para CSV')
   }
+
+  const mainCategory = categoryData[0]
 
   return (
     <div className="space-y-6">
@@ -211,11 +223,11 @@ export function ReportsDashboard() {
         <div className="flex items-center space-x-2">
           <Select value={selectedAccount} onValueChange={setSelectedAccount}>
             <SelectTrigger className="w-48">
-              <SelectValue />
+              <SelectValue placeholder="Selecione a conta" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todas as contas</SelectItem>
-              {accounts.map(account => (
+              {accounts.map((account) => (
                 <SelectItem key={account.id} value={account.id}>
                   {account.name}
                 </SelectItem>
@@ -224,7 +236,7 @@ export function ReportsDashboard() {
           </Select>
           <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
             <SelectTrigger className="w-40">
-              <SelectValue />
+              <SelectValue placeholder="Período" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="3months">3 meses</SelectItem>
@@ -232,14 +244,14 @@ export function ReportsDashboard() {
               <SelectItem value="12months">12 meses</SelectItem>
             </SelectContent>
           </Select>
-          <Button variant="outline" onClick={exportToPDF}>
+          {/* <Button variant="outline" onClick={exportToPDF}>
             <Download className="mr-2 h-4 w-4" />
             PDF
           </Button>
           <Button variant="outline" onClick={exportToCSV}>
             <Download className="mr-2 h-4 w-4" />
             CSV
-          </Button>
+          </Button> */}
         </div>
       </div>
 
@@ -281,15 +293,23 @@ export function ReportsDashboard() {
             <Target className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className={`text-2xl font-bold ${
-              savingsRate >= 20 ? 'text-green-600' : 
-              savingsRate >= 10 ? 'text-yellow-600' : 'text-red-600'
-            }`}>
+            <div
+              className={`text-2xl font-bold ${
+                savingsRate >= 20
+                  ? 'text-green-600'
+                  : savingsRate >= 10
+                  ? 'text-yellow-600'
+                  : 'text-red-600'
+              }`}
+            >
               {formatPercentage(savingsRate)}
             </div>
             <p className="text-xs text-muted-foreground">
-              {savingsRate >= 20 ? 'Excelente!' : 
-               savingsRate >= 10 ? 'Bom progresso' : 'Pode melhorar'}
+              {savingsRate >= 20
+                ? 'Excelente!'
+                : savingsRate >= 10
+                ? 'Bom progresso'
+                : 'Pode melhorar'}
             </p>
           </CardContent>
         </Card>
@@ -321,58 +341,59 @@ export function ReportsDashboard() {
 
         {/* Aba de Tendências */}
         <TabsContent value="trends" className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-2">
-            {/* Gráfico de linha - Tendência mensal */}
-            <Card className="md:col-span-2">
-              <CardHeader>
-                <CardTitle>Fluxo de Caixa Mensal</CardTitle>
-                <CardDescription>
-                  Evolução das receitas, despesas e saldo ao longo do tempo
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="h-80">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <ComposedChart data={monthlyTrendData}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="month" />
-                      <YAxis tickFormatter={(value) => `R$ ${(value / 1000).toFixed(0)}k`} />
-                      <Tooltip 
-                        formatter={(value, name) => [formatCurrency(value), name]}
-                        labelFormatter={(label) => `Período: ${label}`}
-                      />
-                      <Legend />
-                      <Area 
-                        type="monotone" 
-                        dataKey="receitas" 
-                        stackId="1"
-                        stroke="#10b981" 
-                        fill="#10b981" 
-                        fillOpacity={0.3}
-                        name="Receitas"
-                      />
-                      <Area 
-                        type="monotone" 
-                        dataKey="despesas" 
-                        stackId="2"
-                        stroke="#ef4444" 
-                        fill="#ef4444" 
-                        fillOpacity={0.3}
-                        name="Despesas"
-                      />
-                      <Line 
-                        type="monotone" 
-                        dataKey="saldo" 
-                        stroke="#3b82f6" 
-                        strokeWidth={3}
-                        name="Saldo"
-                      />
-                    </ComposedChart>
-                  </ResponsiveContainer>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+          <Card className="md:col-span-2">
+            <CardHeader>
+              <CardTitle>Fluxo de Caixa Mensal</CardTitle>
+              <CardDescription>
+                Evolução das receitas, despesas e saldo ao longo do tempo
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="h-80">
+                <ResponsiveContainer width="100%" height="100%">
+                  <ComposedChart data={monthlyTrendData}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="month" />
+                    <YAxis
+                      tickFormatter={(value) =>
+                        `R$ ${(value / 1000).toFixed(0)}k`
+                      }
+                    />
+                    <Tooltip
+                      formatter={(value, name) => [formatCurrency(value), name]}
+                      labelFormatter={(label) => `Período: ${label}`}
+                    />
+                    <Legend />
+                    <Area
+                      type="monotone"
+                      dataKey="receitas"
+                      stackId="1"
+                      stroke="#10b981"
+                      fill="#10b981"
+                      fillOpacity={0.3}
+                      name="Receitas"
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="despesas"
+                      stackId="2"
+                      stroke="#ef4444"
+                      fill="#ef4444"
+                      fillOpacity={0.3}
+                      name="Despesas"
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="saldo"
+                      stroke="#3b82f6"
+                      strokeWidth={3}
+                      name="Saldo"
+                    />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
 
         {/* Aba de Categorias */}
@@ -396,14 +417,19 @@ export function ReportsDashboard() {
                         cy="50%"
                         outerRadius={80}
                         dataKey="value"
-                        label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                        label={({ name, percent }) =>
+                          `${name} ${(percent * 100).toFixed(0)}%`
+                        }
                       >
                         {categoryData.map((entry, index) => (
                           <Cell key={`cell-${index}`} fill={entry.color} />
                         ))}
                       </Pie>
-                      <Tooltip 
-                        formatter={(value) => [formatCurrency(value), 'Gasto']}
+                      <Tooltip
+                        formatter={(value) => [
+                          formatCurrency(value),
+                          'Gasto',
+                        ]}
                       />
                     </PieChart>
                   </ResponsiveContainer>
@@ -421,23 +447,43 @@ export function ReportsDashboard() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {categoryData.map((category, index) => (
-                    <div key={category.name} className="flex items-center justify-between">
-                      <div className="flex items-center space-x-3">
-                        <Badge variant="outline" className="w-8 h-8 rounded-full p-0 flex items-center justify-center">
-                          {index + 1}
-                        </Badge>
-                        <span className="text-lg">{category.icon}</span>
-                        <span className="font-medium">{category.name}</span>
+                  {categoryData.length === 0 && (
+                    <p className="text-sm text-muted-foreground">
+                      Nenhuma despesa registrada no período selecionado.
+                    </p>
+                  )}
+
+                  {categoryData.map((category, index) => {
+                    const percentage = getCategoryPercentageOfTotal(
+                      category.value
+                    )
+
+                    return (
+                      <div
+                        key={category.name}
+                        className="flex items-center justify-between"
+                      >
+                        <div className="flex items-center space-x-3">
+                          <Badge
+                            variant="outline"
+                            className="w-8 h-8 rounded-full p-0 flex items-center justify-center"
+                          >
+                            {index + 1}
+                          </Badge>
+                          <span className="text-lg">{category.icon}</span>
+                          <span className="font-medium">{category.name}</span>
+                        </div>
+                        <div className="text-right">
+                          <p className="font-semibold">
+                            {formatCurrency(category.value)}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {formatPercentage(percentage)} do total
+                          </p>
+                        </div>
                       </div>
-                      <div className="text-right">
-                        <p className="font-semibold">{formatCurrency(category.value)}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {((category.value / periodExpenses) * 100).toFixed(1)}% do total
-                        </p>
-                      </div>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               </CardContent>
             </Card>
@@ -454,52 +500,66 @@ export function ReportsDashboard() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                {accountAnalysis.map((account) => (
-                  <div key={account.id} className="p-4 border rounded-lg">
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center space-x-3">
-                        <div 
-                          className="w-3 h-3 rounded-full"
-                          style={{ backgroundColor: account.color }}
-                        />
+              {accountAnalysis.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  Nenhuma movimentação encontrada para o período selecionado.
+                </p>
+              ) : (
+                <div className="space-y-4">
+                  {accountAnalysis.map((account) => (
+                    <div key={account.id} className="p-4 border rounded-lg">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center space-x-3">
+                          <div
+                            className="w-3 h-3 rounded-full"
+                            style={{ backgroundColor: account.color }}
+                          />
+                          <div>
+                            <h3 className="font-semibold">{account.name}</h3>
+                            <p className="text-sm text-muted-foreground">
+                              {account.transactionCount} transações
+                            </p>
+                          </div>
+                        </div>
+                        <Badge
+                          variant={
+                            account.netFlow >= 0 ? 'default' : 'destructive'
+                          }
+                        >
+                          {account.netFlow >= 0 ? 'Positivo' : 'Negativo'}
+                        </Badge>
+                      </div>
+
+                      <div className="grid grid-cols-3 gap-4 text-sm">
                         <div>
-                          <h3 className="font-semibold">{account.name}</h3>
-                          <p className="text-sm text-muted-foreground">
-                            {account.transactionCount} transações
+                          <p className="text-muted-foreground">Receitas</p>
+                          <p className="font-semibold text-green-600">
+                            {formatCurrency(account.income)}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-muted-foreground">Despesas</p>
+                          <p className="font-semibold text-red-600">
+                            {formatCurrency(account.expenses)}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-muted-foreground">Fluxo Líquido</p>
+                          <p
+                            className={`font-semibold ${
+                              account.netFlow >= 0
+                                ? 'text-green-600'
+                                : 'text-red-600'
+                            }`}
+                          >
+                            {formatCurrency(account.netFlow)}
                           </p>
                         </div>
                       </div>
-                      <Badge variant={account.netFlow >= 0 ? 'default' : 'destructive'}>
-                        {account.netFlow >= 0 ? 'Positivo' : 'Negativo'}
-                      </Badge>
                     </div>
-                    
-                    <div className="grid grid-cols-3 gap-4 text-sm">
-                      <div>
-                        <p className="text-muted-foreground">Receitas</p>
-                        <p className="font-semibold text-green-600">
-                          {formatCurrency(account.income)}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-muted-foreground">Despesas</p>
-                        <p className="font-semibold text-red-600">
-                          {formatCurrency(account.expenses)}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-muted-foreground">Fluxo Líquido</p>
-                        <p className={`font-semibold ${
-                          account.netFlow >= 0 ? 'text-green-600' : 'text-red-600'
-                        }`}>
-                          {formatCurrency(account.netFlow)}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -516,36 +576,49 @@ export function ReportsDashboard() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                  <h4 className="font-medium text-blue-900 mb-1">💡 Taxa de Poupança</h4>
+                  <h4 className="font-medium text-blue-900 mb-1">
+                    💡 Taxa de Poupança
+                  </h4>
                   <p className="text-sm text-blue-800">
-                    {savingsRate >= 20 
+                    {savingsRate >= 20
                       ? 'Parabéns! Sua taxa de poupança está excelente.'
                       : savingsRate >= 10
                       ? 'Boa taxa de poupança, mas ainda há espaço para melhorar.'
-                      : 'Considere reduzir gastos para aumentar sua poupança.'
-                    }
+                      : 'Considere reduzir gastos para aumentar sua poupança.'}
                   </p>
                 </div>
-                
+
                 <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
-                  <h4 className="font-medium text-green-900 mb-1">📈 Maior Categoria</h4>
+                  <h4 className="font-medium text-green-900 mb-1">
+                    📈 Maior Categoria
+                  </h4>
                   <p className="text-sm text-green-800">
-                    {categoryData[0] && (
+                    {mainCategory && periodExpenses > 0 ? (
                       <>
-                        {categoryData[0].icon} {categoryData[0].name} representa{' '}
-                        {((categoryData[0].value / periodExpenses) * 100).toFixed(1)}% dos seus gastos.
+                        {mainCategory.icon} {mainCategory.name} representa{' '}
+                        {formatPercentage(
+                          getCategoryPercentageOfTotal(mainCategory.value)
+                        )}{' '}
+                        dos seus gastos.
                       </>
+                    ) : (
+                      'Nenhuma despesa registrada no período selecionado.'
                     )}
                   </p>
                 </div>
-                
+
                 <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-                  <h4 className="font-medium text-yellow-900 mb-1">⚡ Fluxo de Caixa</h4>
+                  <h4 className="font-medium text-yellow-900 mb-1">
+                    ⚡ Fluxo de Caixa
+                  </h4>
                   <p className="text-sm text-yellow-800">
-                    {periodBalance >= 0 
-                      ? `Você teve um saldo positivo de ${formatCurrency(periodBalance)} no período.`
-                      : `Atenção: você gastou ${formatCurrency(Math.abs(periodBalance))} a mais do que recebeu.`
-                    }
+                    {periodBalance >= 0
+                      ? `Você teve um saldo positivo de ${formatCurrency(
+                          periodBalance
+                        )} no período.`
+                      : `Atenção: você gastou ${formatCurrency(
+                          Math.abs(periodBalance)
+                        )} a mais do que recebeu.`}
                   </p>
                 </div>
               </CardContent>
@@ -569,17 +642,19 @@ export function ReportsDashboard() {
                       </p>
                     </div>
                   </div>
-                  
+
                   <div className="flex items-start space-x-2">
                     <PieChartIcon className="h-4 w-4 text-green-600 mt-1" />
                     <div>
-                      <p className="text-sm font-medium">Diversifique investimentos</p>
+                      <p className="text-sm font-medium">
+                        Diversifique investimentos
+                      </p>
                       <p className="text-xs text-muted-foreground">
                         Considere diferentes tipos de aplicações financeiras
                       </p>
                     </div>
                   </div>
-                  
+
                   <div className="flex items-start space-x-2">
                     <BarChart3 className="h-4 w-4 text-purple-600 mt-1" />
                     <div>
@@ -589,7 +664,7 @@ export function ReportsDashboard() {
                       </p>
                     </div>
                   </div>
-                  
+
                   <div className="flex items-start space-x-2">
                     <CreditCard className="h-4 w-4 text-red-600 mt-1" />
                     <div>

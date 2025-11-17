@@ -1,16 +1,22 @@
-import { useState } from 'react'
-import { MoreHorizontal, Plus, Edit, Trash2, Eye, EyeOff } from 'lucide-react'
-import { Button } from '@/components/ui/button.jsx'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card.jsx'
-import { Badge } from '@/components/ui/badge.jsx'
-import { 
-  DropdownMenu, 
-  DropdownMenuContent, 
-  DropdownMenuItem, 
+import { useState } from "react";
+import { MoreHorizontal, Plus, Edit, Trash2, Eye, EyeOff } from "lucide-react";
+import { Button } from "@/components/ui/button.jsx";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card.jsx";
+import { Badge } from "@/components/ui/badge.jsx";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuTrigger,
-  DropdownMenuSeparator
-} from '@/components/ui/dropdown-menu.jsx'
-import { 
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu.jsx";
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -19,107 +25,113 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from '@/components/ui/alert-dialog.jsx'
-import { Dialog, DialogContent } from '@/components/ui/dialog.jsx'
-import { useAccounts, ACCOUNT_TYPES } from '../../contexts/AccountsContext.jsx'
-import { AccountForm } from './AccountForm.jsx'
+} from "@/components/ui/alert-dialog.jsx";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog.jsx";
+import { useAccounts, ACCOUNT_TYPES } from "../../contexts/AccountsContext.jsx";
+import { AccountForm } from "./AccountForm.jsx";
 
 // Ícones para cada tipo de conta
 const getAccountIcon = (type) => {
   const icons = {
-    [ACCOUNT_TYPES.CHECKING]: '💳',
-    [ACCOUNT_TYPES.SAVINGS]: '🏦',
-    [ACCOUNT_TYPES.CREDIT]: '💳',
-    [ACCOUNT_TYPES.CASH]: '💰',
-    [ACCOUNT_TYPES.INVESTMENT]: '📈'
-  }
-  return icons[type] || '💰'
-}
+    [ACCOUNT_TYPES.CHECKING]: "💳",
+    [ACCOUNT_TYPES.SAVINGS]: "🏦",
+    [ACCOUNT_TYPES.CREDIT]: "💳",
+    [ACCOUNT_TYPES.CASH]: "💰",
+    [ACCOUNT_TYPES.INVESTMENT]: "📈",
+  };
+  return icons[type] || "💰";
+};
 
 // Labels para tipos de conta
 const getAccountTypeLabel = (type) => {
   const labels = {
-    [ACCOUNT_TYPES.CHECKING]: 'Conta Corrente',
-    [ACCOUNT_TYPES.SAVINGS]: 'Poupança',
-    [ACCOUNT_TYPES.CREDIT]: 'Cartão de Crédito',
-    [ACCOUNT_TYPES.CASH]: 'Dinheiro',
-    [ACCOUNT_TYPES.INVESTMENT]: 'Investimentos'
-  }
-  return labels[type] || 'Conta'
-}
+    [ACCOUNT_TYPES.CHECKING]: "Conta Corrente",
+    [ACCOUNT_TYPES.SAVINGS]: "Poupança",
+    [ACCOUNT_TYPES.CREDIT]: "Cartão de Crédito",
+    [ACCOUNT_TYPES.CASH]: "Dinheiro",
+    [ACCOUNT_TYPES.INVESTMENT]: "Investimentos",
+  };
+  return labels[type] || "Conta";
+};
 
 export function AccountsList() {
-  const [showForm, setShowForm] = useState(false)
-  const [editingAccount, setEditingAccount] = useState(null)
-  const [deletingAccount, setDeletingAccount] = useState(null)
-  const [showBalances, setShowBalances] = useState(true)
-  
-  const { 
-    accounts, 
-    deleteAccount, 
-    getTotalBalance, 
+  const [showForm, setShowForm] = useState(false);
+  const [editingAccount, setEditingAccount] = useState(null);
+  const [deletingAccount, setDeletingAccount] = useState(null);
+  const [showBalances, setShowBalances] = useState(true);
+
+  const {
+    accounts,
+    deleteAccount,
+    getTotalBalance,
     getTotalDebt,
     isLoading,
-    error 
-  } = useAccounts()
+    error,
+  } = useAccounts();
 
   const handleAddAccount = () => {
-    usesetEditingAccount(null)
-    setShowForm(true)
-  }
+    setEditingAccount(null);
+    setShowForm(true);
+  };
 
   const handleEditAccount = (account) => {
-    usesetEditingAccount(account)
-    usesetShowForm(true)
-  }
+    setEditingAccount(account);
+    setShowForm(true);
+  };
 
   const handleDeleteAccount = async () => {
     if (deletingAccount) {
       try {
-        await deleteAccount(deletingAccount.id)
-        usesetDeletingAccount(null)
+        await deleteAccount(deletingAccount.id);
+        setDeletingAccount(null);
       } catch (error) {
-        console.error('Erro ao deletar conta:', error)
+        console.error("Erro ao deletar conta:", error);
       }
     }
-  }
+  };
 
   const handleFormSave = () => {
-    usesetShowForm(false)
-    setEditingAccount(null)
-  }
+    setShowForm(false);
+    setEditingAccount(null);
+  };
 
   const handleFormCancel = () => {
-    usesetShowForm(false)
-    setEditingAccount(null)
-  }
+    setShowForm(false);
+    setEditingAccount(null);
+  };
 
   const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('pt-BR', {
-      style: 'currency',
-      currency: 'BRL'
-    }).format(amount)
-  }
+    return new Intl.NumberFormat("pt-BR", {
+      style: "currency",
+      currency: "BRL",
+    }).format(amount);
+  };
 
   const formatBalance = (amount, type) => {
-    if (!showBalances) return '••••'
-    
+    if (!showBalances) return "••••";
+
     if (type === ACCOUNT_TYPES.CREDIT && amount < 0) {
-      return `${formatCurrency(Math.abs(amount))} (dívida)`
+      return `${formatCurrency(Math.abs(amount))} (dívida)`;
     }
-    
-    return formatCurrency(amount)
-  }
+
+    return formatCurrency(amount);
+  };
 
   const getBalanceColor = (amount, type) => {
     if (type === ACCOUNT_TYPES.CREDIT) {
-      return amount < 0 ? 'text-red-600' : 'text-green-600'
+      return amount < 0 ? "text-red-600" : "text-green-600";
     }
-    return amount >= 0 ? 'text-green-600' : 'text-red-600'
-  }
+    return amount >= 0 ? "text-green-600" : "text-red-600";
+  };
 
-  const totalBalance = getTotalBalance()
-  const totalDebt = getTotalDebt()
+  const totalBalance = getTotalBalance();
+  const totalDebt = getTotalDebt();
 
   return (
     <div className="space-y-6">
@@ -135,12 +147,19 @@ export function AccountsList() {
           <Button
             variant="outline"
             size="icon"
-            onClick={() => usesetShowBalances(!showBalances)}
-            title={showBalances ? 'Ocultar saldos' : 'Mostrar saldos'}
+            onClick={() => setShowBalances((prev) => !prev)}
+            title={showBalances ? "Ocultar saldos" : "Mostrar saldos"}
           >
-            {showBalances ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+            {showBalances ? (
+              <Eye className="h-4 w-4" />
+            ) : (
+              <EyeOff className="h-4 w-4" />
+            )}
           </Button>
-          <Button onClick={handleAddAccount} className="flex items-center space-x-2">
+          <Button
+            onClick={handleAddAccount}
+            className="flex items-center space-x-2"
+          >
             <Plus className="h-4 w-4" />
             <span>Nova Conta</span>
           </Button>
@@ -156,7 +175,7 @@ export function AccountsList() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-green-600">
-              {showBalances ? formatCurrency(totalBalance) : '••••••'}
+              {showBalances ? formatCurrency(totalBalance) : "••••••"}
             </div>
             <p className="text-xs text-muted-foreground">
               Soma de todas as contas (exceto cartões)
@@ -166,12 +185,14 @@ export function AccountsList() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total de Dívidas</CardTitle>
+            <CardTitle className="text-sm font-medium">
+              Total de Dívidas
+            </CardTitle>
             <span className="text-2xl">💳</span>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-red-600">
-              {showBalances ? formatCurrency(totalDebt) : '••••••'}
+              {showBalances ? formatCurrency(totalDebt) : "••••••"}
             </div>
             <p className="text-xs text-muted-foreground">
               Dívidas em cartões de crédito
@@ -181,14 +202,22 @@ export function AccountsList() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Patrimônio Líquido</CardTitle>
+            <CardTitle className="text-sm font-medium">
+              Patrimônio Líquido
+            </CardTitle>
             <span className="text-2xl">📊</span>
           </CardHeader>
           <CardContent>
-            <div className={`text-2xl font-bold ${
-              totalBalance - totalDebt >= 0 ? 'text-green-600' : 'text-red-600'
-            }`}>
-              {showBalances ? formatCurrency(totalBalance - totalDebt) : '••••••'}
+            <div
+              className={`text-2xl font-bold ${
+                totalBalance - totalDebt >= 0
+                  ? "text-green-600"
+                  : "text-red-600"
+              }`}
+            >
+              {showBalances
+                ? formatCurrency(totalBalance - totalDebt)
+                : "••••••"}
             </div>
             <p className="text-xs text-muted-foreground">
               Saldo total menos dívidas
@@ -204,7 +233,7 @@ export function AccountsList() {
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-3">
-                  <div 
+                  <div
                     className="w-3 h-3 rounded-full"
                     style={{ backgroundColor: account.color }}
                   />
@@ -223,12 +252,14 @@ export function AccountsList() {
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={() => handleEditAccount(account)}>
+                    <DropdownMenuItem
+                      onClick={() => handleEditAccount(account)}
+                    >
                       <Edit className="mr-2 h-4 w-4" />
                       Editar
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem 
+                    <DropdownMenuItem
                       onClick={() => setDeletingAccount(account)}
                       className="text-destructive"
                     >
@@ -245,34 +276,50 @@ export function AccountsList() {
                 {/* Saldo */}
                 <div>
                   <p className="text-sm text-muted-foreground">Saldo</p>
-                  <p className={`text-xl font-bold ${getBalanceColor(account.balance, account.type)}`}>
+                  <p
+                    className={`text-xl font-bold ${getBalanceColor(
+                      account.balance,
+                      account.type
+                    )}`}
+                  >
                     {formatBalance(account.balance, account.type)}
                   </p>
                 </div>
 
                 {/* Limite de crédito (se aplicável) */}
-                {account.type === ACCOUNT_TYPES.CREDIT && account.creditLimit && (
-                  <div>
-                    <p className="text-sm text-muted-foreground">Limite</p>
-                    <p className="text-sm font-medium">
-                      {showBalances ? formatCurrency(account.creditLimit) : '••••'}
-                    </p>
-                    <div className="w-full bg-muted rounded-full h-2 mt-1">
-                      <div 
-                        className="bg-primary h-2 rounded-full transition-all"
-                        style={{ 
-                          width: `${Math.min((Math.abs(account.balance) / account.creditLimit) * 100, 100)}%` 
-                        }}
-                      />
+                {account.type === ACCOUNT_TYPES.CREDIT &&
+                  account.creditLimit && (
+                    <div>
+                      <p className="text-sm text-muted-foreground">Limite</p>
+                      <p className="text-sm font-medium">
+                        {showBalances
+                          ? formatCurrency(account.creditLimit)
+                          : "••••"}
+                      </p>
+                      <div className="w-full bg-muted rounded-full h-2 mt-1">
+                        <div
+                          className="bg-primary h-2 rounded-full transition-all"
+                          style={{
+                            width: `${Math.min(
+                              (Math.abs(account.balance) /
+                                account.creditLimit) *
+                                100,
+                              100
+                            )}%`,
+                          }}
+                        />
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {showBalances
+                          ? `${(
+                              (Math.abs(account.balance) /
+                                account.creditLimit) *
+                              100
+                            ).toFixed(1)}% utilizado`
+                          : "••• utilizado"}
+                      </p>
                     </div>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {showBalances 
-                        ? `${((Math.abs(account.balance) / account.creditLimit) * 100).toFixed(1)}% utilizado`
-                        : '••• utilizado'
-                      }
-                    </p>
-                  </div>
-                )}
+                  )}
 
                 {/* Informações adicionais */}
                 {account.bank && (
@@ -285,17 +332,19 @@ export function AccountsList() {
                 {account.accountNumber && (
                   <div>
                     <p className="text-sm text-muted-foreground">Conta</p>
-                    <p className="text-sm font-medium">{account.accountNumber}</p>
+                    <p className="text-sm font-medium">
+                      {account.accountNumber}
+                    </p>
                   </div>
                 )}
 
                 {/* Status */}
                 <div className="flex items-center justify-between">
-                  <Badge variant={account.isActive ? 'default' : 'secondary'}>
-                    {account.isActive ? 'Ativa' : 'Inativa'}
+                  <Badge variant={account.isActive ? "default" : "secondary"}>
+                    {account.isActive ? "Ativa" : "Inativa"}
                   </Badge>
                   <p className="text-xs text-muted-foreground">
-                    {new Date(account.updatedAt).toLocaleDateString('pt-BR')}
+                    {new Date(account.updatedAt).toLocaleDateString("pt-BR")}
                   </p>
                 </div>
               </div>
@@ -304,7 +353,7 @@ export function AccountsList() {
         ))}
 
         {/* Card para adicionar nova conta */}
-        <Card 
+        <Card
           className="border-dashed border-2 hover:border-primary/50 transition-colors cursor-pointer"
           onClick={handleAddAccount}
         >
@@ -326,9 +375,12 @@ export function AccountsList() {
             <div className="text-center space-y-4">
               <div className="text-6xl">💰</div>
               <div>
-                <h3 className="text-lg font-semibold">Nenhuma conta encontrada</h3>
+                <h3 className="text-lg font-semibold">
+                  Nenhuma conta encontrada
+                </h3>
                 <p className="text-muted-foreground">
-                  Adicione sua primeira conta para começar a gerenciar suas finanças
+                  Adicione sua primeira conta para começar a gerenciar suas
+                  finanças
                 </p>
               </div>
               <Button onClick={handleAddAccount}>
@@ -341,8 +393,17 @@ export function AccountsList() {
       )}
 
       {/* Dialog para formulário */}
-      <Dialog open={showForm} onOpenChange={usesetShowForm}>
+      <Dialog open={showForm} onOpenChange={setShowForm}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              {editingAccount ? "Editar Conta" : "Nova Conta"}
+            </DialogTitle>
+            <DialogDescription>
+              Preencha os dados da conta e salve para atualizar sua lista.
+            </DialogDescription>
+          </DialogHeader>
+
           <AccountForm
             account={editingAccount}
             onSave={handleFormSave}
@@ -352,7 +413,12 @@ export function AccountsList() {
       </Dialog>
 
       {/* Dialog de confirmação para exclusão */}
-      <AlertDialog open={!!deletingAccount} onOpenChange={() => usesetDeletingAccount(null)}>
+      <AlertDialog
+        open={!!deletingAccount}
+        onOpenChange={(open) => {
+          if (!open) setDeletingAccount(null);
+        }}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Excluir Conta</AlertDialogTitle>
@@ -368,7 +434,7 @@ export function AccountsList() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction 
+            <AlertDialogAction
               onClick={handleDeleteAccount}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
@@ -378,5 +444,5 @@ export function AccountsList() {
         </AlertDialogContent>
       </AlertDialog>
     </div>
-  )
+  );
 }

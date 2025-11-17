@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { 
   Plus, 
   Edit, 
@@ -44,7 +44,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog.jsx'
-import { Dialog, DialogContent } from '@/components/ui/dialog.jsx'
+import { 
+  Dialog, 
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog.jsx'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select.jsx'
 import { useBudgets, BUDGET_STATUS } from '../../contexts/BudgetsContext.jsx'
 import { BudgetForm } from './BudgetForm.jsx'
@@ -53,24 +59,90 @@ export function BudgetsList() {
   const [showForm, setShowForm] = useState(false)
   const [editingBudget, setEditingBudget] = useState(null)
   const [deletingBudget, setDeletingBudget] = useState(null)
-  const [selectedPeriod, setSelectedPeriod] = useState(`${new Date().getFullYear()}-${new Date().getMonth() + 1}`)
-  
-  const { 
-    budgets, 
-    deleteBudget, 
-    getBudgetsWithSpent,
-    getTotalBudgeted,
-    getTotalSpent,
-    isLoading 
-  } = useBudgets()
-
-  const [year, month] = selectedPeriod.split('-').map(Number)
-  const budgetsWithSpent = getBudgetsWithSpent().filter(
-    budget => budget.year === year && budget.month === month
+  const [selectedPeriod, setSelectedPeriod] = useState(
+    `${new Date().getFullYear()}-${new Date().getMonth() + 1}`
   )
   
-  const totalBudgeted = getTotalBudgeted(year, month)
-  const totalSpent = getTotalSpent(year, month)
+  const { 
+    budgets,      // agora usamos o array do contexto
+    deleteBudget, 
+    isLoading,
+  } = useBudgets()
+
+
+
+  // Opções de período (últimos 12 meses)
+  const periodOptions = useMemo(() => {
+    const options = []
+    const currentDate = new Date()
+    
+    for (let i = 0; i < 12; i++) {
+      const date = new Date(
+        currentDate.getFullYear(),
+        currentDate.getMonth() - i,
+        1
+      )
+      const year = date.getFullYear()
+      const month = date.getMonth() + 1
+      const label = date.toLocaleDateString('pt-BR', {
+        year: 'numeric',
+        month: 'long',
+      })
+
+      options.push({
+        value: `${year}-${month}`,
+        label: label.charAt(0).toUpperCase() + label.slice(1),
+      })
+    }
+
+    return options
+  }, [])
+
+  const [year, month] = useMemo(
+    () => selectedPeriod.split('-').map(Number),
+    [selectedPeriod]
+  )
+
+  // Orçamentos do período selecionado (com base em startDate)
+    const budgetsForPeriod = useMemo(() => {
+    if (!budgets || budgets.length === 0) return []
+
+    const result = budgets
+      .filter((budget) => {
+        if (!budget.startDate) return false
+        const d = new Date(budget.startDate)
+        return d.getFullYear() === year && d.getMonth() + 1 === month
+      })
+      .map((budget) => {
+        const amount = Number(budget.amount) || 0
+        const spent = Number(budget.spent) || 0
+        const remaining = amount - spent
+        const percentage = amount > 0 ? (spent / amount) * 100 : 0
+
+        return {
+          ...budget,
+          amount,
+          spent,
+          remaining,
+          percentage: Math.min(Math.max(percentage, 0), 100),
+        }
+      })
+
+    
+
+    return result
+  }, [budgets, year, month])
+
+
+  // Totais
+  const totalBudgeted = budgetsForPeriod.reduce(
+    (acc, b) => acc + b.amount,
+    0
+  )
+  const totalSpent = budgetsForPeriod.reduce(
+    (acc, b) => acc + b.spent,
+    0
+  )
   const totalRemaining = totalBudgeted - totalSpent
 
   const handleAddBudget = () => {
@@ -136,40 +208,20 @@ export function BudgetsList() {
   }
 
   // Dados para o gráfico de pizza
-  const pieChartData = budgetsWithSpent.map(budget => ({
-    name: budget.category.name,
+  const pieChartData = budgetsForPeriod.map((budget) => ({
+    name: budget.category?.name ?? budget.name,
     value: budget.spent,
     budgeted: budget.amount,
-    color: budget.category.color
+    color: budget.category?.color ?? budget.color ?? '#3b82f6',
   }))
 
   // Dados para o gráfico de barras
-  const barChartData = budgetsWithSpent.map(budget => ({
-    category: budget.category.name,
+  const barChartData = budgetsForPeriod.map((budget) => ({
+    category: budget.category?.name ?? budget.name,
     orçado: budget.amount,
     gasto: budget.spent,
-    restante: Math.max(budget.remaining, 0)
+    restante: Math.max(budget.remaining, 0),
   }))
-
-  // Gerar opções de período (últimos 12 meses)
-  const getPeriodOptions = () => {
-    const options = []
-    const currentDate = new Date()
-    
-    for (let i = 0; i < 12; i++) {
-      const date = new Date(currentDate.getFullYear(), currentDate.getMonth() - i, 1)
-      const year = date.getFullYear()
-      const month = date.getMonth() + 1
-      const label = date.toLocaleDateString('pt-BR', { year: 'numeric', month: 'long' })
-      
-      options.push({
-        value: `${year}-${month}`,
-        label: label.charAt(0).toUpperCase() + label.slice(1)
-      })
-    }
-    
-    return options
-  }
 
   return (
     <div className="space-y-6">
@@ -187,14 +239,18 @@ export function BudgetsList() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {getPeriodOptions().map(option => (
+              {periodOptions.map((option) => (
                 <SelectItem key={option.value} value={option.value}>
                   {option.label}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
-          <Button onClick={handleAddBudget} className="flex items-center space-x-2">
+          <Button 
+            onClick={handleAddBudget} 
+            className="flex items-center space-x-2"
+            disabled={isLoading}
+          >
             <Plus className="h-4 w-4" />
             <span>Novo Orçamento</span>
           </Button>
@@ -239,22 +295,26 @@ export function BudgetsList() {
             <Calendar className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className={`text-2xl font-bold ${
-              totalRemaining >= 0 ? 'text-green-600' : 'text-red-600'
-            }`}>
+            <div
+              className={`text-2xl font-bold ${
+                totalRemaining >= 0 ? 'text-green-600' : 'text-red-600'
+              }`}
+            >
               {formatCurrency(totalRemaining)}
             </div>
             <p className="text-xs text-muted-foreground">
-              {totalRemaining >= 0 ? 'Disponível para gastar' : 'Orçamento ultrapassado'}
+              {totalRemaining >= 0
+                ? 'Disponível para gastar'
+                : 'Orçamento ultrapassado'}
             </p>
           </CardContent>
         </Card>
       </div>
 
       {/* Gráficos */}
-      {budgetsWithSpent.length > 0 && (
+      {budgetsForPeriod.length > 0 && (
         <div className="grid gap-6 md:grid-cols-2">
-          {/* Gráfico de Pizza - Distribuição dos Gastos */}
+          {/* Gráfico de Pizza */}
           <Card>
             <CardHeader>
               <CardTitle>Distribuição dos Gastos</CardTitle>
@@ -272,13 +332,15 @@ export function BudgetsList() {
                       cy="50%"
                       outerRadius={80}
                       dataKey="value"
-                      label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                      label={({ name, percent }) =>
+                        `${name} ${(percent * 100).toFixed(0)}%`
+                      }
                     >
                       {pieChartData.map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={entry.color} />
                       ))}
                     </Pie>
-                    <Tooltip 
+                    <Tooltip
                       formatter={(value) => [formatCurrency(value), 'Gasto']}
                     />
                   </PieChart>
@@ -287,7 +349,7 @@ export function BudgetsList() {
             </CardContent>
           </Card>
 
-          {/* Gráfico de Barras - Orçado vs Gasto */}
+          {/* Gráfico de Barras */}
           <Card>
             <CardHeader>
               <CardTitle>Orçado vs Gasto</CardTitle>
@@ -300,18 +362,23 @@ export function BudgetsList() {
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={barChartData}>
                     <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis 
-                      dataKey="category" 
+                    <XAxis
+                      dataKey="category"
                       tick={{ fontSize: 12 }}
                       angle={-45}
                       textAnchor="end"
                       height={80}
                     />
-                    <YAxis 
-                      tickFormatter={(value) => `R$ ${(value / 1000).toFixed(0)}k`}
+                    <YAxis
+                      tickFormatter={(value) =>
+                        `R$ ${(value / 1000).toFixed(0)}k`
+                      }
                     />
-                    <Tooltip 
-                      formatter={(value, name) => [formatCurrency(value), name]}
+                    <Tooltip
+                      formatter={(value, name) => [
+                        formatCurrency(value),
+                        name,
+                      ]}
                     />
                     <Legend />
                     <Bar dataKey="orçado" fill="#3b82f6" name="Orçado" />
@@ -333,24 +400,27 @@ export function BudgetsList() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {budgetsWithSpent.length === 0 ? (
+          {budgetsForPeriod.length === 0 ? (
             <div className="text-center py-12">
               <div className="text-6xl mb-4">📊</div>
-              <h3 className="text-lg font-semibold mb-2">Nenhum orçamento encontrado</h3>
+              <h3 className="text-lg font-semibold mb-2">
+                Nenhum orçamento encontrado
+              </h3>
               <p className="text-muted-foreground mb-4">
                 Crie seu primeiro orçamento para começar a controlar seus gastos
               </p>
-              <Button onClick={handleAddBudget}>
+              <Button onClick={handleAddBudget} disabled={isLoading}>
                 <Plus className="mr-2 h-4 w-4" />
                 Criar Orçamento
               </Button>
             </div>
           ) : (
             <div className="space-y-4">
-              {budgetsWithSpent.map((budget) => {
+              {budgetsForPeriod.map((budget) => {
                 const statusConfig = getStatusConfig(budget.status)
                 const StatusIcon = statusConfig.icon
-                
+                const safePercentage = budget.percentage
+
                 return (
                   <div
                     key={budget.id}
@@ -359,35 +429,46 @@ export function BudgetsList() {
                     <div className="flex items-center justify-between mb-3">
                       <div className="flex items-center space-x-3">
                         <div className="flex items-center space-x-2">
-                          <span className="text-xl">{budget.category.icon}</span>
+                          <span className="text-xl">
+                            {budget.category?.icon}
+                          </span>
                           <div>
                             <h3 className="font-semibold">{budget.name}</h3>
                             <p className="text-sm text-muted-foreground">
-                              {budget.category.name}
+                              {budget.category?.name ?? 'Categoria'}
                             </p>
                           </div>
                         </div>
                       </div>
-                      
+
                       <div className="flex items-center space-x-3">
-                        <Badge variant={statusConfig.variant} className="flex items-center space-x-1">
+                        <Badge
+                          variant={statusConfig.variant}
+                          className="flex items-center space-x-1"
+                        >
                           <StatusIcon className="h-3 w-3" />
                           <span>{statusConfig.label}</span>
                         </Badge>
-                        
+
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-8 w-8">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8"
+                            >
                               <MoreHorizontal className="h-4 w-4" />
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => handleEditBudget(budget)}>
+                            <DropdownMenuItem
+                              onClick={() => handleEditBudget(budget)}
+                            >
                               <Edit className="mr-2 h-4 w-4" />
                               Editar
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
-                            <DropdownMenuItem 
+                            <DropdownMenuItem
                               onClick={() => setDeletingBudget(budget)}
                               className="text-destructive"
                             >
@@ -405,17 +486,15 @@ export function BudgetsList() {
                         <span>Gasto: {formatCurrency(budget.spent)}</span>
                         <span>Orçamento: {formatCurrency(budget.amount)}</span>
                       </div>
-                      <Progress 
-                        value={budget.percentage} 
-                        className="h-2"
-                      />
+                      <Progress value={safePercentage} className="h-2" />
                       <div className="flex justify-between text-xs text-muted-foreground">
-                        <span>{budget.percentage.toFixed(1)}% utilizado</span>
+                        <span>{safePercentage.toFixed(1)}% utilizado</span>
                         <span>
-                          {budget.remaining >= 0 
+                          {budget.remaining >= 0
                             ? `${formatCurrency(budget.remaining)} restante`
-                            : `${formatCurrency(Math.abs(budget.remaining))} acima do orçamento`
-                          }
+                            : `${formatCurrency(
+                                Math.abs(budget.remaining)
+                              )} acima do orçamento`}
                         </span>
                       </div>
                     </div>
@@ -428,8 +507,23 @@ export function BudgetsList() {
       </Card>
 
       {/* Dialog para formulário */}
-      <Dialog open={showForm} onOpenChange={setShowForm}>
+      <Dialog
+        open={showForm}
+        onOpenChange={(open) => {
+          setShowForm(open)
+          if (!open) setEditingBudget(null)
+        }}
+      >
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              {editingBudget ? 'Editar Orçamento' : 'Novo Orçamento'}
+            </DialogTitle>
+            <DialogDescription>
+              Defina ou atualize o limite de gastos para uma categoria específica.
+            </DialogDescription>
+          </DialogHeader>
+
           <BudgetForm
             budget={editingBudget}
             onSave={handleFormSave}
@@ -439,14 +533,21 @@ export function BudgetsList() {
       </Dialog>
 
       {/* Dialog de confirmação para exclusão */}
-      <AlertDialog open={!!deletingBudget} onOpenChange={() => setDeletingBudget(null)}>
+      <AlertDialog
+        open={!!deletingBudget}
+        onOpenChange={(open) => {
+          if (!open) setDeletingBudget(null)
+        }}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Excluir Orçamento</AlertDialogTitle>
             <AlertDialogDescription>
-              Tem certeza que deseja excluir o orçamento "{deletingBudget?.name}"?
+              Tem certeza que deseja excluir o orçamento "
+              {deletingBudget?.name}"?
               <span className="block mt-2 text-sm">
-                Valor: {deletingBudget && formatCurrency(deletingBudget.amount)}
+                Valor:{' '}
+                {deletingBudget && formatCurrency(deletingBudget.amount)}
               </span>
               <span className="block text-sm text-muted-foreground">
                 Esta ação não pode ser desfeita.
@@ -455,7 +556,7 @@ export function BudgetsList() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction 
+            <AlertDialogAction
               onClick={handleDeleteBudget}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
