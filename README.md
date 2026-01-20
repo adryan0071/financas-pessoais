@@ -250,7 +250,7 @@ Este projeto é licenciado sob a **MIT License** - veja o arquivo LICENSE para d
 
 ## 👨‍💻 Desenvolvedor
 
-**Desenvolvido por:** Adryan Rodrigues
+**Desenvolvido por:** Adryan Rodrigues 
 **Tecnologia:** React + JavaScript + Tailwind CSS  
 **Versão:** 1.0.0  
 **Data:** Outubro 2025
