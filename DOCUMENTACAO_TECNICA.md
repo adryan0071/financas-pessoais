@@ -1,6 +1,6 @@
 # Documentação Técnica - Aplicativo de Finanças Pessoais
 
-**Autor:** Manus AI  
+**Autor:** Adryan Rodrigues  
 **Data:** Outubro de 2025  
 **Versão:** 1.0.0
 
