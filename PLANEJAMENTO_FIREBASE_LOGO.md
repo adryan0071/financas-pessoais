@@ -75,6 +75,6 @@ Com base neste planejamento, a próxima fase será a **Configuração do Projeto
 
 ---
 
-**Desenvolvido por:** Manus AI  
+**Desenvolvido por:** Adryan Rodrigues   
 **Tecnologias:** Firebase, React, JavaScript  
 **Data:** Outubro 2025
